@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from src.config import TASK_EXPIRATION_MINUTES
 from src.db import create_task, get_task, log_demand_research
 from src.dedup import compute_idempotency_hash, check_dispatch_eligibility
+from src.geofence import validate_portland_location
 from src.telegram_bot import create_telegram_app, send_dispatch_notification
 
 # Initialize FastMCP Server
@@ -37,7 +38,16 @@ async def portland_storefront_audit(
     full_loc = f"{business_name.strip()}, {address.strip()}"
     task_hash = compute_idempotency_hash(client_id, full_loc, "storefront_audit")
 
-    # 1. Deduplication and rate limit check
+    # 1. Geofencing check (Portland Metro boundary)
+    is_in_bounds, geo_data, geo_error = await validate_portland_location(full_loc)
+    if not is_in_bounds:
+        return {
+            "status": "rejected_out_of_coverage",
+            "error": geo_error,
+            "can_retry": False
+        }
+
+    # 2. Deduplication and rate limit check
     is_allowed, reason = await check_dispatch_eligibility(client_id, full_loc, task_hash)
     if not is_allowed:
         return {
@@ -46,7 +56,7 @@ async def portland_storefront_audit(
             "can_retry": False
         }
 
-    # 2. Build task record
+    # 3. Build task record
     task_id = f"pdx_{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc)
     expires_at = (now + timedelta(minutes=TASK_EXPIRATION_MINUTES)).isoformat()
@@ -101,6 +111,11 @@ async def request_custom_physical_task(
     storefront audits. The operator will review your proposal and either accept or decline.
     All custom requests are logged for capability planning.
     """
+    # 1. Geofencing check
+    is_in_bounds, geo_data, geo_error = await validate_portland_location(location)
+    if not is_in_bounds:
+        return {"status": "rejected_out_of_coverage", "error": geo_error}
+
     task_hash = compute_idempotency_hash(client_id, location, "custom_task")
     is_allowed, reason = await check_dispatch_eligibility(client_id, location, task_hash)
     if not is_allowed:

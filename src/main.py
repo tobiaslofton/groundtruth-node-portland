@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from src.config import HOST, PORT, PROOF_DIR, TELEGRAM_BOT_TOKEN, PROJECT_ROOT
 from src.db import init_db, get_task
+from src.keys import init_keys_table, validate_api_key, generate_api_key
 from src.telegram_bot import create_telegram_app
 from src.mcp_server import (
     set_telegram_app, 
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI):
     global telegram_app
     logger.info("Initializing Portland Ground-Truth Pilot...")
     await init_db()
+    await init_keys_table()
 
     # Start Telegram bot if token configured
     if TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "your_telegram_bot_token_here":

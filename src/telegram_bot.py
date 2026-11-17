@@ -29,6 +29,7 @@ from src.db import (
     get_current_active_task,
     log_demand_research
 )
+from src.vision import analyze_field_photo
 
 logger = logging.getLogger("ground_truth.telegram")
 
@@ -176,21 +177,31 @@ async def handle_photo_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
     metadata = extract_exif(image_bytes)
     photo_url = f"{BASE_PUBLIC_URL}/proof/{filename}"
 
+    # Run automated Gemini multimodal vision analysis
+    analysis = await analyze_field_photo(
+        image_bytes, 
+        active_task["location"], 
+        active_task.get("specific_questions", [])
+    )
+
     # Extract caption if provided as operator notes
     notes = update.message.caption or "Verified photo captured on-site."
     extracted_answers = {
         "operator_notes": notes,
         "verified_on_site": True,
-        "has_gps": "gps" in metadata
+        "has_gps": "gps" in metadata,
+        "vision_analysis": analysis
     }
 
     # Mark completed in database
     await complete_task(task_id, photo_url, metadata, extracted_answers)
 
+    vision_summary = analysis.get("summary", "Photo stored successfully.")
     await update.message.reply_text(
         f"🎉 *TASK FULFILLED!*\n\n"
         f"*Task ID:* `{task_id}`\n"
         f"*Proof Saved:* `{filename}`\n"
+        f"*AI Vision Finding:* {vision_summary}\n\n"
         f"*Status:* Delivered to AI Agent.",
         parse_mode="Markdown"
     )
