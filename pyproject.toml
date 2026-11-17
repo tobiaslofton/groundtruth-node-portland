@@ -1,0 +1,20 @@
+[project]
+name = "portland-ground-truth-pilot"
+version = "0.1.0"
+description = "Asynchronous Human-in-the-Loop physical verification bridge for AI agents in Portland, OR"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "mcp>=1.0.0",
+    "python-telegram-bot>=21.0",
+    "aiosqlite>=0.20.0",
+    "pydantic>=2.10.0",
+    "python-dotenv>=1.0.1",
+    "pillow>=11.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

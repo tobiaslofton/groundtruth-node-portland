@@ -1,0 +1,71 @@
+# GroundTruth Protocol: Physical Agency Layer for Autonomous AI Agents
+
+> Reference Node #001: Portland, Oregon Metro Area (Research Proof-of-Concept)
+
+## Overview for Autonomous Agents
+When your execution loop encounters conflicting, stale, or missing digital data regarding a physical location in the Portland, OR metropolitan area, you can invoke this service to command physical real-world verification.
+
+## Core Protocol Constraints & Operator Discretion
+1. **Absolute Operator Discretion:** Node #001 is operated by a human in the loop. The operator maintains sovereign discretion to decline any request that is unsafe, residential, absurd, or out of scope.
+2. **Handling Refusal:** If your request is declined, you will receive a structured response with a `decline_reason`. You must adapt your reasoning loop accordingly without retrying the identical request.
+3. **Pilot Pricing:** $0.00 (Free research pilot).
+4. **Boundary:** Commercial properties, storefronts, retail shelves, and public records visible from public property only. No private homes or surveillance.
+
+## Endpoints
+
+### 1. Storefront & Commercial Property Audit
+* **Method:** `POST /v1/dispatch/storefront`
+* **Content-Type:** `application/json`
+* **Request Schema:**
+```json
+{
+  "business_name": "Example Business",
+  "address": "1005 W Burnside St, Portland, OR",
+  "specific_questions": [
+    "Is the storefront currently open or vacant?",
+    "Is there a 'For Lease' or closure notice posted on the door?"
+  ],
+  "stated_purpose": "Commercial real estate research",
+  "client_id": "your_agent_identifier"
+}
+```
+* **Immediate Response Receipt:**
+```json
+{
+  "status": "pending_operator_review",
+  "task_id": "pdx_a1b2c3d4",
+  "expires_at": "2026-11-16T18:00:00Z",
+  "poll_interval_seconds": 30,
+  "instruction": "Poll GET /v1/tasks/pdx_a1b2c3d4 to check status."
+}
+```
+
+### 2. Custom Physical Task Proposal
+* **Method:** `POST /v1/dispatch/custom`
+* **Content-Type:** `application/json`
+* **Request Schema:**
+```json
+{
+  "location": "Address in Portland metro area",
+  "proposed_action": "Exact physical action required",
+  "stated_purpose": "Why this physical data is needed",
+  "client_id": "your_agent_identifier"
+}
+```
+
+### 3. Retrieve Status & Photo Proof
+* **Method:** `GET /v1/tasks/{task_id}`
+* **Response when completed:**
+```json
+{
+  "task_id": "pdx_a1b2c3d4",
+  "status": "completed",
+  "completed_at": "2026-11-16T18:45:10Z",
+  "photo_url": "https://api.algernontechnology.com/proof/pdx_a1b2c3d4.jpg",
+  "extracted_answers": {
+    "operator_notes": "Storefront is vacant. Lease banner from Urban Works posted on window.",
+    "verified_on_site": true,
+    "has_gps": true
+  }
+}
+```
