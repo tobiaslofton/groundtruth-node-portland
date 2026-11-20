@@ -51,14 +51,14 @@ async def analyze_field_photo(
         }
 
     b64_image = base64.b64encode(image_bytes).decode("utf-8")
-    questions_fmt = "\n".join([f"- {q}" for q in questions]) or "- General storefront and building status"
+    questions_fmt = "\n".join([f"- {q}" for q in questions]) or "- General physical environment and object status"
 
     prompt = (
         "You are an objective physical inspection auditor for an autonomous AI agent.\n"
         f"Target Location: {location}\n"
         f"Questions / Checklist to verify:\n{questions_fmt}\n\n"
         "Inspect the attached photo taken by the human field operator on-site. "
-        "Answer each question factually based ONLY on visible details in the image (signs, notices, doors, windows).\n"
+        "Answer each question factually based ONLY on visible details in the image (objects, conditions, physical surroundings, notices, text, status).\n"
         "Respond strictly with valid JSON conforming to this schema:\n"
         "{\n"
         '  "photo_matches_location": true,\n'

@@ -90,12 +90,21 @@ async def get_task(task_id: str) -> Optional[Dict[str, Any]]:
             if data["status"] == "pending_operator_review" and data["expires_at"] <= now_iso:
                 await db.execute("""
                     UPDATE tasks 
-                    SET status = 'expired', decline_reason = 'Task expired before operator review.'
+                    SET status = 'expired', decline_reason = 'Operator did not review task within review window.'
                     WHERE task_id = ?
                 """, (task_id,))
                 await db.commit()
                 data["status"] = "expired"
-                data["decline_reason"] = "Task expired before operator review."
+                data["decline_reason"] = "Operator did not review task within review window."
+            elif data["status"] == "accepted_in_progress" and data["expires_at"] <= now_iso:
+                await db.execute("""
+                    UPDATE tasks 
+                    SET status = 'abandoned_timeout', decline_reason = 'Operator accepted but failed to upload photo proof within fulfillment window.'
+                    WHERE task_id = ?
+                """, (task_id,))
+                await db.commit()
+                data["status"] = "abandoned_timeout"
+                data["decline_reason"] = "Operator accepted but failed to upload photo proof within fulfillment window."
 
             return data
 
@@ -151,13 +160,24 @@ async def get_active_task_by_hash(idempotency_hash: str) -> Optional[Dict[str, A
             return dict(row) if row else None
 
 async def update_task_status(task_id: str, status: str, decline_reason: Optional[str] = None) -> None:
-    """Update task lifecycle state."""
+    """Update task lifecycle state. When accepted, automatically extend expires_at by fulfillment window."""
+    now = datetime.now(timezone.utc)
+    from datetime import timedelta
+    from src.config import FULFILLMENT_TIMEOUT_MINUTES
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
-            UPDATE tasks 
-            SET status = ?, decline_reason = ? 
-            WHERE task_id = ?
-        """, (status, decline_reason, task_id))
+        if status == "accepted_in_progress":
+            new_expires = (now + timedelta(minutes=FULFILLMENT_TIMEOUT_MINUTES)).isoformat()
+            await db.execute("""
+                UPDATE tasks 
+                SET status = ?, decline_reason = ?, expires_at = ? 
+                WHERE task_id = ?
+            """, (status, decline_reason, new_expires, task_id))
+        else:
+            await db.execute("""
+                UPDATE tasks 
+                SET status = ?, decline_reason = ? 
+                WHERE task_id = ?
+            """, (status, decline_reason, task_id))
         await db.commit()
 
 async def complete_task(

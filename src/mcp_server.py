@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 from mcp.server.fastmcp import FastMCP
 
-from src.config import TASK_EXPIRATION_MINUTES
+from src.config import OPERATOR_REVIEW_TIMEOUT_MINUTES, FULFILLMENT_TIMEOUT_MINUTES
 from src.db import create_task, get_task, log_demand_research, is_operator_available
 from src.dedup import compute_idempotency_hash, check_dispatch_eligibility
 from src.geofence import validate_portland_location
@@ -21,17 +21,17 @@ def set_telegram_app(app):
     _telegram_app = app
 
 @mcp.tool()
-async def portland_storefront_audit(
-    business_name: str,
-    address: str,
+async def portland_physical_verification(
+    location: str,
     specific_questions: List[str],
-    stated_purpose: Optional[str] = "Commercial ground truth verification",
+    stated_purpose: Optional[str] = "Physical reality verification",
     client_id: Optional[str] = "agent_client_default"
 ) -> Dict[str, Any]:
     """
-    Dispatches a human field inspector in the Portland, OR metropolitan area to verify
-    physical ground truth of a commercial storefront or building (e.g. checking if open,
-    verifying posted hours, photographing lease/eviction notices, checking retail stock).
+    Dispatches a human field operator in the Portland, OR metropolitan area to verify
+    physical ground truth of any real-world location (e.g. checking accessibility,
+    verifying posted notices or operating status, inspecting equipment/chargers/infrastructure,
+    checking event crowds/lines, or photographing physical assets).
     
     Do NOT use for private residences or general web-searchable queries.
     """
@@ -43,8 +43,8 @@ async def portland_storefront_audit(
             "can_retry": True
         }
 
-    full_loc = f"{business_name.strip()}, {address.strip()}"
-    task_hash = compute_idempotency_hash(client_id, full_loc, "storefront_audit")
+    full_loc = location.strip()
+    task_hash = compute_idempotency_hash(client_id, full_loc, "physical_verification")
 
     # 1. Geofencing check (Portland Metro boundary)
     is_in_bounds, geo_data, geo_error = await validate_portland_location(full_loc)
@@ -67,44 +67,63 @@ async def portland_storefront_audit(
     # 3. Build task record
     task_id = f"pdx_{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc)
-    expires_at = (now + timedelta(minutes=TASK_EXPIRATION_MINUTES)).isoformat()
+    review_expires_at = (now + timedelta(minutes=OPERATOR_REVIEW_TIMEOUT_MINUTES)).isoformat()
+    fulfillment_expires_at = (now + timedelta(minutes=FULFILLMENT_TIMEOUT_MINUTES)).isoformat()
 
     task_payload = {
         "task_id": task_id,
         "idempotency_hash": task_hash,
-        "task_type": "storefront_audit",
+        "task_type": "physical_verification",
         "client_id": client_id,
         "location": full_loc,
         "specific_questions": specific_questions,
         "stated_purpose": stated_purpose,
         "status": "pending_operator_review",
         "created_at": now.isoformat(),
-        "expires_at": expires_at
+        "expires_at": review_expires_at
     }
 
-    # 3. Store task and demand log
+    # Store task and demand log
     await create_task(task_payload)
     log_demand_research({
-        "event": "new_storefront_audit_request",
+        "event": "new_physical_verification_request",
         "task_id": task_id,
         "client_id": client_id,
         "location": full_loc,
         "questions": specific_questions
     })
 
-    # 4. Push alert to Telegram operator (uses live app if running, falls back to direct HTTP)
+    # Push alert to Telegram operator
     try:
         await send_dispatch_notification(_telegram_app, task_payload)
-    except Exception as e:
+    except Exception:
         pass
 
     return {
         "status": "pending_operator_review",
         "task_id": task_id,
-        "expires_at": expires_at,
+        "operator_review_deadline": review_expires_at,
+        "fulfillment_deadline": fulfillment_expires_at,
         "poll_interval_seconds": 30,
-        "instruction": "Verification request dispatched to local Portland operator. Poll check_task_status with task_id to retrieve proof and answers."
+        "instruction": "Verification request dispatched to local Portland operator. Operator has 15 minutes to review and accept. Once accepted, fulfillment window extends to 90 minutes. Poll check_task_status with task_id to track lifecycle and retrieve verified proof."
     }
+
+@mcp.tool()
+async def portland_storefront_audit(
+    business_name: str,
+    address: str,
+    specific_questions: List[str],
+    stated_purpose: Optional[str] = "Commercial ground truth verification",
+    client_id: Optional[str] = "agent_client_default"
+) -> Dict[str, Any]:
+    """Compatibility alias for portland_physical_verification."""
+    full_loc = f"{business_name.strip()}, {address.strip()}"
+    return await portland_physical_verification(
+        location=full_loc,
+        specific_questions=specific_questions,
+        stated_purpose=stated_purpose,
+        client_id=client_id
+    )
 
 @mcp.tool()
 async def request_custom_physical_task(

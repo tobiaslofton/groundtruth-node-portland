@@ -17,6 +17,7 @@ from src.keys import init_keys_table, validate_api_key, generate_api_key
 from src.telegram_bot import create_telegram_app
 from src.mcp_server import (
     set_telegram_app, 
+    portland_physical_verification,
     portland_storefront_audit, 
     request_custom_physical_task, 
     check_task_status
@@ -109,6 +110,12 @@ async def verify_api_key(api_key: Optional[str] = Security(api_key_header)):
         raise HTTPException(status_code=403, detail="Invalid or revoked API key.")
     return key_record
 
+class PhysicalVerificationRequest(BaseModel):
+    location: str
+    specific_questions: List[str]
+    stated_purpose: Optional[str] = "Physical reality verification"
+    client_id: Optional[str] = "rest_client_default"
+
 class StorefrontAuditRequest(BaseModel):
     business_name: str
     address: str
@@ -176,6 +183,21 @@ async def health_check():
         "service": "portland_ground_truth_pilot",
         "bot_active": bool(telegram_app and telegram_app.updater.running)
     }
+
+@app.post("/v1/dispatch/verify")
+async def api_physical_verification(req: PhysicalVerificationRequest, _auth: bool = Depends(verify_api_key)):
+    """Dispatches a human field operator to verify any physical location in Portland, OR."""
+    res = await portland_physical_verification(
+        location=req.location,
+        specific_questions=req.specific_questions,
+        stated_purpose=req.stated_purpose,
+        client_id=req.client_id
+    )
+    if res.get("status") == "rejected_operator_unavailable":
+        raise HTTPException(status_code=503, detail=res.get("error"))
+    if res.get("status") == "rejected_by_policy":
+        raise HTTPException(status_code=429, detail=res.get("error"))
+    return res
 
 @app.post("/v1/dispatch/storefront")
 async def api_storefront_audit(req: StorefrontAuditRequest, _auth: bool = Depends(verify_api_key)):
