@@ -22,15 +22,26 @@ def get_gemini_api_key() -> str:
             pass
     return key
 
+def _post_gemini_sync(url: str, payload: dict) -> dict:
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        res_json = json.loads(resp.read().decode())
+        candidate_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+        analysis = json.loads(candidate_text)
+        analysis["automated_vision"] = True
+        return analysis
+
 async def analyze_field_photo(
     image_bytes: bytes,
     location: str,
     questions: List[str]
 ) -> Dict[str, Any]:
     """
-    Call Gemini Flash multimodal API to inspect photo against verification questions.
+    Call Gemini Flash multimodal API via async thread to inspect photo against verification questions.
     Returns structured key-value answers.
     """
+    import asyncio
     api_key = get_gemini_api_key()
     if not api_key:
         logger.warning("GEMINI_API_KEY not found. Skipping automated vision parsing.")
@@ -80,14 +91,7 @@ async def analyze_field_photo(
     }
 
     try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            res_json = json.loads(resp.read().decode())
-            candidate_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
-            analysis = json.loads(candidate_text)
-            analysis["automated_vision"] = True
-            return analysis
+        return await asyncio.to_thread(_post_gemini_sync, url, payload)
     except Exception as e:
         logger.error("Gemini vision analysis failed: %s", e)
         return {

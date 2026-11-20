@@ -10,8 +10,10 @@ from src.config import DB_PATH, DEMAND_LOG_PATH
 logger = logging.getLogger("ground_truth.db")
 
 async def init_db() -> None:
-    """Initialize SQLite database with required tables and indexes."""
+    """Initialize SQLite database with required tables, indexes, and concurrency pragmas."""
     async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA journal_mode=WAL;")
+        await db.execute("PRAGMA busy_timeout=5000;")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
                 task_id TEXT PRIMARY KEY,
