@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from mcp.server.fastmcp import FastMCP
 
 from src.config import TASK_EXPIRATION_MINUTES
-from src.db import create_task, get_task, log_demand_research
+from src.db import create_task, get_task, log_demand_research, is_operator_available
 from src.dedup import compute_idempotency_hash, check_dispatch_eligibility
 from src.geofence import validate_portland_location
 from src.telegram_bot import create_telegram_app, send_dispatch_notification
@@ -35,6 +35,14 @@ async def portland_storefront_audit(
     
     Do NOT use for private residences or general web-searchable queries.
     """
+    # 0. Check operator availability (pause / off-duty mode)
+    if not await is_operator_available():
+        return {
+            "status": "rejected_operator_unavailable",
+            "error": "GroundTruth Node #001 operator is currently off-duty or paused. Operating hours: 9 AM - 8 PM PST.",
+            "can_retry": True
+        }
+
     full_loc = f"{business_name.strip()}, {address.strip()}"
     task_hash = compute_idempotency_hash(client_id, full_loc, "storefront_audit")
 
@@ -84,12 +92,11 @@ async def portland_storefront_audit(
         "questions": specific_questions
     })
 
-    # 4. Push alert to Telegram operator
-    if _telegram_app:
-        try:
-            await send_dispatch_notification(_telegram_app, task_payload)
-        except Exception as e:
-            pass
+    # 4. Push alert to Telegram operator (uses live app if running, falls back to direct HTTP)
+    try:
+        await send_dispatch_notification(_telegram_app, task_payload)
+    except Exception as e:
+        pass
 
     return {
         "status": "pending_operator_review",
@@ -111,6 +118,14 @@ async def request_custom_physical_task(
     storefront audits. The operator will review your proposal and either accept or decline.
     All custom requests are logged for capability planning.
     """
+    # 0. Check operator availability (pause / off-duty mode)
+    if not await is_operator_available():
+        return {
+            "status": "rejected_operator_unavailable",
+            "error": "GroundTruth Node #001 operator is currently off-duty or paused. Operating hours: 9 AM - 8 PM PST.",
+            "can_retry": True
+        }
+
     # 1. Geofencing check
     is_in_bounds, geo_data, geo_error = await validate_portland_location(location)
     if not is_in_bounds:
@@ -148,11 +163,10 @@ async def request_custom_physical_task(
         "purpose": stated_purpose
     })
 
-    if _telegram_app:
-        try:
-            await send_dispatch_notification(_telegram_app, task_payload)
-        except Exception:
-            pass
+    try:
+        await send_dispatch_notification(_telegram_app, task_payload)
+    except Exception as e:
+        pass
 
     return {
         "status": "pending_operator_review",

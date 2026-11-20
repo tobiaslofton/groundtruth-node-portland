@@ -2,11 +2,12 @@
 
 Exposes physical ground truth verification as a native LangChain StructuredTool.
 """
+import os
 from typing import List, Optional
 import requests
 from pydantic import BaseModel, Field
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = os.getenv("GROUNDTRUTH_BASE_URL", "http://127.0.0.1:8000")
 
 class StorefrontAuditInput(BaseModel):
     business_name: str = Field(description="Name of the commercial business")

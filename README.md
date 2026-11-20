@@ -61,6 +61,7 @@ It proves that an autonomous agent can:
 
 ### REST Endpoints
 * `GET /llms.txt` — Machine-readable manifesto and API instructions for web-searching agents.
-* `POST /v1/dispatch/storefront` — Commercial property audit dispatch.
-* `POST /v1/dispatch/custom` — Custom physical actuation proposal.
-* `GET /v1/tasks/{task_id}` — Poll task status, proof photo URL, and extracted facts.
+* `POST /v1/dispatch/storefront` — Commercial property audit dispatch (Optional Header: `X-API-Key`).
+* `POST /v1/dispatch/custom` — Custom physical actuation proposal (Optional Header: `X-API-Key`).
+* `GET /v1/tasks/{task_id}` — Poll task status, proof photo URL, and extracted vision facts.
+* `GET /v1/tasks/{task_id}/photo` — Direct binary streaming of verified on-site proof photo.

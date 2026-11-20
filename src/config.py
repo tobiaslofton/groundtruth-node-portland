@@ -21,6 +21,7 @@ PORT = int(os.getenv("PORT", "8000"))
 BASE_PUBLIC_URL = os.getenv("BASE_PUBLIC_URL", f"http://{HOST}:{PORT}")
 
 # Operational guardrails
+REQUIRE_API_KEY = os.getenv("REQUIRE_API_KEY", "false").lower() in ("true", "1", "yes")
 MAX_ACTIVE_TASKS = int(os.getenv("MAX_ACTIVE_TASKS", "1"))
 DAILY_DISPATCH_LIMIT = int(os.getenv("DAILY_DISPATCH_LIMIT", "3"))
 TASK_EXPIRATION_MINUTES = int(os.getenv("TASK_EXPIRATION_MINUTES", "15"))

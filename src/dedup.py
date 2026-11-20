@@ -44,10 +44,13 @@ async def check_dispatch_eligibility(client_id: str, location: str, idempotency_
             if completed_today >= DAILY_DISPATCH_LIMIT:
                 return False, f"Daily operator dispatch limit reached ({DAILY_DISPATCH_LIMIT} tasks). Service reopens tomorrow."
 
-        # 2. Check identical active task
+        # 2. Check identical active task (ignore expired tasks)
+        now_iso = now.isoformat()
         async with db.execute(
-            "SELECT task_id, status FROM tasks WHERE idempotency_hash = ? AND status IN ('pending_operator_review', 'accepted_in_progress')",
-            (idempotency_hash,)
+            """SELECT task_id, status FROM tasks 
+               WHERE idempotency_hash = ? 
+                 AND (status = 'accepted_in_progress' OR (status = 'pending_operator_review' AND expires_at > ?))""",
+            (idempotency_hash, now_iso)
         ) as cursor:
             existing = await cursor.fetchone()
             if existing:

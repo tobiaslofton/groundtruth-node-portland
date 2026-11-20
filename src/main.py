@@ -3,14 +3,15 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Security, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse
+from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 
-from src.config import HOST, PORT, PROOF_DIR, TELEGRAM_BOT_TOKEN, PROJECT_ROOT
+from src.config import HOST, PORT, PROOF_DIR, TELEGRAM_BOT_TOKEN, PROJECT_ROOT, REQUIRE_API_KEY
 from src.db import init_db, get_task
 from src.keys import init_keys_table, validate_api_key, generate_api_key
 from src.telegram_bot import create_telegram_app
@@ -87,6 +88,27 @@ app.add_middleware(
 # Serve verified proof photos statically
 app.mount("/proof", StaticFiles(directory=str(PROOF_DIR)), name="proof")
 
+# API Key security scheme
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(api_key: Optional[str] = Security(api_key_header)):
+    """Validates API Key if configured/required, else logs usage for research."""
+    if not REQUIRE_API_KEY:
+        if api_key:
+            await validate_api_key(api_key)
+        return True
+
+    if not api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing required X-API-Key header. Request access at tobias@algernontechnology.com"
+        )
+
+    is_valid, key_record = await validate_api_key(api_key)
+    if not is_valid:
+        raise HTTPException(status_code=403, detail="Invalid or revoked API key.")
+    return key_record
+
 class StorefrontAuditRequest(BaseModel):
     business_name: str
     address: str
@@ -156,7 +178,7 @@ async def health_check():
     }
 
 @app.post("/v1/dispatch/storefront")
-async def api_storefront_audit(req: StorefrontAuditRequest):
+async def api_storefront_audit(req: StorefrontAuditRequest, _auth: bool = Depends(verify_api_key)):
     """Dispatches a human field inspector to verify a commercial storefront in Portland, OR."""
     res = await portland_storefront_audit(
         business_name=req.business_name,
@@ -165,12 +187,14 @@ async def api_storefront_audit(req: StorefrontAuditRequest):
         stated_purpose=req.stated_purpose,
         client_id=req.client_id
     )
+    if res.get("status") == "rejected_operator_unavailable":
+        raise HTTPException(status_code=503, detail=res.get("error"))
     if res.get("status") == "rejected_by_policy":
         raise HTTPException(status_code=429, detail=res.get("error"))
     return res
 
 @app.post("/v1/dispatch/custom")
-async def api_custom_task(req: CustomTaskRequest):
+async def api_custom_task(req: CustomTaskRequest, _auth: bool = Depends(verify_api_key)):
     """Propose a custom physical task in Portland, OR for operator review."""
     res = await request_custom_physical_task(
         location=req.location,
@@ -178,17 +202,38 @@ async def api_custom_task(req: CustomTaskRequest):
         stated_purpose=req.stated_purpose,
         client_id=req.client_id
     )
+    if res.get("status") == "rejected_operator_unavailable":
+        raise HTTPException(status_code=503, detail=res.get("error"))
     if res.get("status") == "rejected_by_policy":
         raise HTTPException(status_code=429, detail=res.get("error"))
     return res
 
 @app.get("/v1/tasks/{task_id}")
-async def api_get_task_status(task_id: str):
+async def api_get_task_status(task_id: str, request: Request):
     """Poll the status of an ongoing or completed task."""
     res = await check_task_status(task_id)
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail="Task not found")
+
+    # Ensure returned photo_url is accessible via current caller host/tunnel
+    if res.get("photo_url"):
+        filename = Path(res["photo_url"]).name
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+        res["photo_url"] = f"{proto}://{host}/proof/{filename}"
     return res
+
+@app.get("/v1/tasks/{task_id}/photo")
+async def api_get_task_photo(task_id: str):
+    """Directly stream proof photo for a completed task."""
+    task = await get_task(task_id)
+    if not task or not task.get("photo_url"):
+        raise HTTPException(status_code=404, detail="Photo not available for this task.")
+    filename = Path(task["photo_url"]).name
+    file_path = PROOF_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Photo file not found on disk.")
+    return FileResponse(file_path, media_type="image/jpeg")
 
 if __name__ == "__main__":
     import uvicorn

@@ -2,11 +2,12 @@
 
 Dispatches a physical verification audit and polls for completed on-site proof.
 """
+import os
 import time
 import requests
 
-# Base URL (Replace with live public tunnel or localhost)
-BASE_URL = "http://127.0.0.1:8000"
+# Base URL (Configurable via GROUNDTRUTH_BASE_URL or defaults to local)
+BASE_URL = os.getenv("GROUNDTRUTH_BASE_URL", "http://127.0.0.1:8000")
 API_KEY = "gt_live_demo"  # Optional during pilot phase
 
 headers = {
