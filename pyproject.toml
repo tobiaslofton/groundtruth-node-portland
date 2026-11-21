@@ -13,6 +13,8 @@ dependencies = [
     "pydantic>=2.10.0",
     "python-dotenv>=1.0.1",
     "pillow>=11.0.0",
+    "langgraph>=1.2.24",
+    "langchain-core>=1.8.4",
 ]
 
 [tool.uv]
