@@ -15,6 +15,7 @@ from src.config import HOST, PORT, PROOF_DIR, TELEGRAM_BOT_TOKEN, PROJECT_ROOT, 
 from src.db import init_db, get_task, list_operators
 from src.fleet import seed_default_operators
 from src.sandbox_ui import get_sandbox_html
+from src.intake_ui import get_intake_html
 from src.keys import init_keys_table, validate_api_key, generate_api_key
 from src.mock import is_mock_mode
 from src.telegram_bot import create_telegram_app
@@ -165,6 +166,7 @@ async def get_root_landing():
     <div class="card">
         <h3>Agent & Developer Resources</h3>
         <ul>
+            <li><strong>Commercial Client Intake:</strong> <a href="/intake"><code>/intake</code></a> (One-Click Verification Form)</li>
             <li><strong>Developer Sandbox Playground:</strong> <a href="/sandbox"><code>/sandbox</code></a> (Visual Interactive Simulator)</li>
             <li><strong>Machine-Readable Specification:</strong> <a href="/llms.txt"><code>/llms.txt</code></a></li>
             <li><strong>Interactive API Documentation:</strong> <a href="/docs">Swagger UI (<code>/docs</code>)</a></li>
@@ -227,6 +229,11 @@ async def api_physical_verification(
     if res.get("status") == "rejected_by_policy":
         raise HTTPException(status_code=429, detail=res.get("error"))
     return res
+
+@app.get("/intake", response_class=HTMLResponse, tags=["Intake"])
+async def get_intake_page():
+    """Client web intake page for commercial real estate analysts to commission site audits."""
+    return get_intake_html()
 
 @app.get("/sandbox", response_class=HTMLResponse, tags=["Sandbox"])
 async def get_sandbox_ui():
