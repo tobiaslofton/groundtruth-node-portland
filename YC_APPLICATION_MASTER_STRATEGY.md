@@ -16,8 +16,9 @@ Digital records across the public web (Google Maps, county databases, Yelp, real
 
 **GroundTruth Protocol** provides a standardized Model Context Protocol (MCP) and REST interface that grants AI agents physical agency—allowing software to asynchronously commission local human operators to physically inspect commercial sites, capture verified photos, and return structured ground-truth facts directly into the agent's context graph.
 
-* **Genesis Node:** Node #001 operating in Portland, Oregon (Multnomah and Clackamas counties).
-* **Initial Commercial Wedge:** Commercial Real Estate (CRE) due diligence, tenant occupancy audits, and retail investment intelligence.
+* **Genesis Node:** Node #001 operating in Portland, Oregon (Multnomah, Clackamas, and Washington counties).
+* **Initial Commercial Wedge:** Out-of-state Commercial Real Estate (CRE) acquisitions analysts, retail REIT due diligence, and automated PropTech bots underwriting regional properties.
+* **The YC Founder Truth (Earned Secret vs. Pedigree):** We are not applying with slide decks or theoretical TAM projections. We win on **Builder Velocity + First Real Contact**: 155 verified integration tests, working LangGraph state machine with anti-spoofing, and founder-fulfilled live audits for real buyers before application day.
 
 ---
 
