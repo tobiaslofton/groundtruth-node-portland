@@ -108,13 +108,20 @@ Digital records across the public web (Google Maps, county databases, Yelp, real
 > 
 > As an infrastructure and security engineer operating an active federal defense contractor (Algernon Technology), I already understand real-world verification, chain of custody, and physical compliance. By pairing autonomous vision validation with a lightweight mobile runner network, GroundTruth turns the physical world into an asynchronous, queryable API.
 
-### Bottoms-Up Revenue Model
-* **Target Unit Price:** $60 per verified commercial audit (Runner payout: $25; Gross Profit: $35 / 58% margin).
-* **Ideal Customer Profile:** Mid-market commercial real estate brokerage, retail REIT acquisition team, or regional PropTech data engine.
-* **Usage Frequency:** 20 physical audits/month per active acquisition team = $1,200/month ($14,400 ARR) per customer.
+### Bottoms-Up Revenue Model & Competitor Benchmark
+* **Enterprise Actuation Pricing:**
+  - **Core Downtown / High Density Foot Patrol:** $35.00 (Runner: $15.00 | Gross Profit: $20.00 / 57% margin)
+  - **Suburban Metro (Beaverton / Lake Oswego):** $50.00 (Runner: $20.00 | Gross Profit: $30.00 / 60% margin)
+  - **Outer Metro / Rush (<30 min dispatch):** $65.00 – $75.00 (Runner: $30.00 | Gross Profit: $35.00–$45.00 / 60% margin)
+* **Real-World Counterpart Comparison:**
+  - **WeGoLook / Inspection Desks:** $125 – $250 / 48–72 hr latency / PDF report. (GroundTruth is **50%–70% cheaper** and **95% faster**).
+  - **Premise / Field Agent:** $25k–$50k/yr annual minimum contracts / 24–48 hr latency. (GroundTruth is **zero commitment utility pricing**).
+  - **DoorDash / Uber Errand:** No camera anti-spoofing, no structured question verification, no developer API.
+* **Ideal Customer Profile:** Mid-market commercial real estate brokerage, retail REIT acquisition team, supply chain freight dispatchers, and autonomous AI agents (CoStar, Perplexity, Flexport bot).
+* **Usage Frequency:** 20 physical audits/month per active client = $1,000 – $1,400/month ($12k–$16.8k ARR) per customer.
 * **Path to $1M ARR:**
-  $$\frac{\$1,000,000 \text{ ARR}}{\$14,400 \text{ ARR/customer}} \approx 70 \text{ active mid-market CRE / PropTech clients}$$
-  *(or ~1,390 physical audits per month across 5 major metro hubs).*
+  $$\frac{\$1,000,000 \text{ ARR}}{\$14,400 \text{ ARR/customer}} \approx 70 \text{ active enterprise CRE / Agentic clients}$$
+  *(or ~1,400 physical verifications per month across 3 major metropolitan hubs).*
 
 ### 1-Minute Founder Video Bullet Outline (Direct-to-Camera)
 * **[0:00 - 0:12] The Problem:** *"I'm Tobias Lofton, founder of GroundTruth. AI agents can write code, analyze financial models, and query databases, but when an agent needs to know if a retail storefront in Portland is actually open or bankrupt, it hits a brick wall. Online data lags reality by months."*

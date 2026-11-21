@@ -235,31 +235,31 @@ class TestBillingAndEscrowEngine:
     """Tests for dynamic pricing, client ledgers, and atomic escrow operations."""
 
     def test_dynamic_pricing_tiers(self):
-        # Downtown base standard
+        # Downtown base standard ($35)
         cost_downtown = estimate_task_cost("1005 W Burnside St, Portland, OR", complexity="standard")
-        assert cost_downtown == 15.0
+        assert cost_downtown == 35.0
 
-        # Suburban tier (Beaverton)
+        # Suburban tier (Beaverton) ($35 + $15 = $50)
         cost_beaverton = estimate_task_cost("Central Station, Beaverton, OR", complexity="standard")
-        assert cost_beaverton == 20.0  # 15 + 5
+        assert cost_beaverton == 50.0
 
-        # Outer metro tier (Gresham / Hillsboro)
+        # Outer metro tier (Gresham / Hillsboro) ($35 + $25 = $60)
         cost_gresham = estimate_task_cost("123 Main St, Gresham, OR", complexity="standard")
-        assert cost_gresham == 25.0  # 15 + 10
+        assert cost_gresham == 60.0
 
         cost_hillsboro = estimate_task_cost("Hillsboro Downtown, Hillsboro, OR", complexity="standard")
-        assert cost_hillsboro == 25.0  # 15 + 10
+        assert cost_hillsboro == 60.0
 
         # Complexity multipliers
         cost_rush = estimate_task_cost("Pioneer Square, Portland, OR", complexity="rush")
-        assert cost_rush == 30.0  # 15 + 15
+        assert cost_rush == 60.0  # 35 + 25
 
         cost_custom = estimate_task_cost("Pioneer Square, Portland, OR", complexity="custom")
-        assert cost_custom == 25.0  # 15 + 10
+        assert cost_custom == 50.0  # 35 + 15
 
         # Outer metro + rush
         cost_outer_rush = estimate_task_cost("Gresham Station, Gresham, OR", complexity="urgent")
-        assert cost_outer_rush == 40.0  # 15 + 10 + 15
+        assert cost_outer_rush == 85.0  # 35 + 25 + 25
 
     @pytest.mark.asyncio
     async def test_client_balance_and_deposits(self, initialized_db):
@@ -398,7 +398,7 @@ class TestProtocolIntegration:
             )
             assert res["status"] == "rejected_insufficient_credits"
             assert "Insufficient credit balance" in res["error"]
-            assert res["estimated_cost"] == 15.0
+            assert res["estimated_cost"] == 35.0
             assert res["current_balance"] == 0.0
 
     @pytest.mark.asyncio
@@ -415,15 +415,15 @@ class TestProtocolIntegration:
             assert res["status"] == "pending_operator_review"
             task_id = res["task_id"]
             assert res["escrow_status"] == "locked"
-            assert res["estimated_cost"] == 15.0
+            assert res["estimated_cost"] == 35.0
 
-            # Client balance reduced from 100 to 85
-            assert await get_client_balance(client_id) == 85.0
+            # Client balance reduced from 100 to 65
+            assert await get_client_balance(client_id) == 65.0
 
             # Verify escrow record is locked
             escrow = await get_task_escrow(task_id)
             assert escrow["status"] == "locked"
-            assert escrow["amount"] == 15.0
+            assert escrow["amount"] == 35.0
 
             # Complete task -> auto releases escrow
             await complete_task(
@@ -473,7 +473,8 @@ class TestProtocolIntegration:
                 client_id=client_id
             )
             task_id = res["task_id"]
-            assert await get_client_balance(client_id) == 35.0
+            # 50 - 35 = 15.0 remaining
+            assert await get_client_balance(client_id) == 15.0
 
             # Sweep expired tasks
             # Manually backdate expires_at

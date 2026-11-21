@@ -17,7 +17,7 @@ from src.config import DB_PATH
 
 logger = logging.getLogger("ground_truth.billing")
 
-BASE_TASK_COST = 15.0
+BASE_TASK_COST = 35.0  # Enterprise actuation baseline ($35 core, $50 suburban, $65 outer/rush)
 
 # Geographic distance surcharge keywords for Portland Metro
 OUTER_METRO_KEYWORDS = (
@@ -28,41 +28,40 @@ SUBURBAN_METRO_KEYWORDS = (
     "beaverton", "tigard", "lake oswego", "milwaukie", "happy valley"
 )
 
-# Complexity surcharges
+# Complexity & SLA surcharges
 COMPLEXITY_SURCHARGES = {
     "standard": 0.0,
-    "complex": 10.0,
-    "high": 10.0,
-    "rush": 15.0,
-    "urgent": 15.0,
-    "custom": 10.0,
+    "complex": 15.0,
+    "high": 15.0,
+    "rush": 25.0,
+    "urgent": 25.0,
+    "custom": 15.0,
 }
 
 
 def estimate_task_cost(location: str, complexity: str = "standard") -> float:
     """
-    Calculate dynamic pricing for a physical task based on location distance tier and complexity.
+    Calculate enterprise dynamic pricing for a physical verification task.
 
-    Base cost: $15.00
-    Distance tier:
-      - Core/Downtown Portland: +$0.00
-      - Suburban Portland Metro (Beaverton, Lake Oswego, etc.): +$5.00
-      - Outer Metro (Gresham, Hillsboro, Oregon City, etc.): +$10.00
-    Complexity:
+    Base cost: $35.00 (Downtown/Core Foot Patrol)
+    Distance tiers:
+      - Core/Downtown Portland: +$0.00 ($35 base)
+      - Suburban Portland Metro (Beaverton, Lake Oswego): +$15.00 ($50 standard)
+      - Outer Metro (Gresham, Hillsboro, Oregon City): +$25.00 ($60 standard)
+    Complexity / SLA:
       - Standard: +$0.00
-      - Complex / High: +$10.00
-      - Rush / Urgent: +$15.00
-      - Custom: +$10.00
+      - Urgent / Rush (<30 min dispatch): +$25.00
+      - High / Complex: +$15.00
 
-    Returns total estimated task cost in USD credits.
+    Ensures 55% - 65% gross margin while undercutting legacy inspection firms ($125 - $250) by 50%+.
     """
     loc_lower = location.lower()
     distance_surcharge = 0.0
 
     if any(k in loc_lower for k in OUTER_METRO_KEYWORDS):
-        distance_surcharge = 10.0
+        distance_surcharge = 25.0
     elif any(k in loc_lower for k in SUBURBAN_METRO_KEYWORDS):
-        distance_surcharge = 5.0
+        distance_surcharge = 15.0
 
     complexity_key = complexity.lower().strip()
     complexity_surcharge = COMPLEXITY_SURCHARGES.get(complexity_key, 0.0)
