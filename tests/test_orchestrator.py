@@ -11,6 +11,8 @@ async def test_langgraph_happy_path(initialized_db):
     
     app = build_ground_truth_graph()
     
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
     initial_state = {
         "task_id": "task_graph_001",
         "client_id": "client_graph_test",
@@ -30,6 +32,12 @@ async def test_langgraph_happy_path(initialized_db):
         "retry_count": 0,
         "max_retries": 2,
         "photo_url": "https://groundtruth.local/evidence/photo_001.jpg",
+        "photo_metadata": {
+            "lat": 45.5188,
+            "lon": -122.6793,
+            "timestamp": now_iso,
+            "mock": True
+        },
         "extracted_answers": {"coffee_cart": "open"},
         "verification_passed": False,
         "verification_notes": None,
