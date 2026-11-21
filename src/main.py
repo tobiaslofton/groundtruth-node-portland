@@ -5,15 +5,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Security, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse, JSONResponse
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 
 from src.config import HOST, PORT, PROOF_DIR, TELEGRAM_BOT_TOKEN, PROJECT_ROOT, REQUIRE_API_KEY
-from src.db import init_db, get_task
+from src.db import init_db, get_task, list_operators
+from src.fleet import seed_default_operators
+from src.sandbox_ui import get_sandbox_html
 from src.keys import init_keys_table, validate_api_key, generate_api_key
+from src.mock import is_mock_mode
 from src.telegram_bot import create_telegram_app
 from src.mcp_server import (
     set_telegram_app, 
@@ -38,9 +41,12 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing Portland Ground-Truth Pilot...")
     await init_db()
     await init_keys_table()
+    await seed_default_operators()
 
-    # Start Telegram bot if token configured
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "your_telegram_bot_token_here":
+    # Start Telegram bot if token configured and not in mock mode
+    if is_mock_mode():
+        logger.info("MOCK_OPERATOR_MODE is active. Dispatched tasks will be fulfilled automatically by mock runner.")
+    elif TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN != "your_telegram_bot_token_here":
         telegram_app = create_telegram_app()
         set_telegram_app(telegram_app)
         await telegram_app.initialize()
@@ -94,7 +100,8 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 async def verify_api_key(api_key: Optional[str] = Security(api_key_header)):
     """Validates API Key if configured/required, else logs usage for research."""
-    if not REQUIRE_API_KEY:
+    import src.config as config
+    if not config.REQUIRE_API_KEY:
         if api_key:
             await validate_api_key(api_key)
         return True
@@ -115,6 +122,7 @@ class PhysicalVerificationRequest(BaseModel):
     specific_questions: List[str]
     stated_purpose: Optional[str] = "Physical reality verification"
     client_id: Optional[str] = "rest_client_default"
+    strict: Optional[bool] = False
 
 class StorefrontAuditRequest(BaseModel):
     business_name: str
@@ -157,6 +165,7 @@ async def get_root_landing():
     <div class="card">
         <h3>Agent & Developer Resources</h3>
         <ul>
+            <li><strong>Developer Sandbox Playground:</strong> <a href="/sandbox"><code>/sandbox</code></a> (Visual Interactive Simulator)</li>
             <li><strong>Machine-Readable Specification:</strong> <a href="/llms.txt"><code>/llms.txt</code></a></li>
             <li><strong>Interactive API Documentation:</strong> <a href="/docs">Swagger UI (<code>/docs</code>)</a></li>
             <li><strong>OpenAPI Specification:</strong> <a href="/openapi.json"><code>/openapi.json</code></a></li>
@@ -181,23 +190,69 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "portland_ground_truth_pilot",
-        "bot_active": bool(telegram_app and telegram_app.updater.running)
+        "bot_active": bool(telegram_app and telegram_app.updater.running),
+        "mock_operator_mode": is_mock_mode()
     }
 
 @app.post("/v1/dispatch/verify")
-async def api_physical_verification(req: PhysicalVerificationRequest, _auth: bool = Depends(verify_api_key)):
+async def api_physical_verification(
+    req: PhysicalVerificationRequest, 
+    strict: Optional[bool] = None,
+    _auth: bool = Depends(verify_api_key)
+):
     """Dispatches a human field operator to verify any physical location in Portland, OR."""
+    is_strict = strict if strict is not None else (req.strict or False)
     res = await portland_physical_verification(
         location=req.location,
         specific_questions=req.specific_questions,
         stated_purpose=req.stated_purpose,
         client_id=req.client_id
     )
+    if res.get("status") in ("rejected_safety_violation", "rejected_safety_policy"):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "rejected_safety_violation",
+                "error": res.get("error"),
+                "detail": res.get("error"),
+                "safety_metadata": res.get("safety_metadata", {})
+            }
+        )
+    if res.get("status") == "rejected_insufficient_credits":
+        return JSONResponse(status_code=402, content=res)
+    if res.get("status") == "rejected_out_of_coverage" and is_strict:
+        raise HTTPException(status_code=400, detail=res.get("error"))
     if res.get("status") == "rejected_operator_unavailable":
         raise HTTPException(status_code=503, detail=res.get("error"))
     if res.get("status") == "rejected_by_policy":
         raise HTTPException(status_code=429, detail=res.get("error"))
     return res
+
+@app.get("/sandbox", response_class=HTMLResponse, tags=["Sandbox"])
+async def get_sandbox_ui():
+    """Interactive developer playground and multi-operator fleet dispatch dashboard."""
+    return get_sandbox_html()
+
+@app.get("/sandbox/api/state", tags=["Sandbox"])
+async def get_sandbox_state():
+    """Real-time protocol state monitor data for sandbox playground."""
+    operators = await list_operators()
+    avail = [op for op in operators if op.get("status") == "available"]
+    return {
+        "status": "online",
+        "service": "portland_ground_truth_pilot",
+        "node": "Node #001 (Portland Metro)",
+        "mock_operator_mode": is_mock_mode(),
+        "operator_count": len(operators),
+        "available_operator_count": len(avail),
+        "operators": operators,
+        "credit_balance": "1,000 Credits (Simulated)"
+    }
+
+@app.get("/api/fleet/operators", tags=["Fleet"])
+async def get_fleet_operators():
+    """Retrieve all registered multi-operator fleet nodes in the Portland Metro area."""
+    return await list_operators()
 
 @app.post("/v1/dispatch/storefront")
 async def api_storefront_audit(req: StorefrontAuditRequest, _auth: bool = Depends(verify_api_key)):
@@ -209,6 +264,18 @@ async def api_storefront_audit(req: StorefrontAuditRequest, _auth: bool = Depend
         stated_purpose=req.stated_purpose,
         client_id=req.client_id
     )
+    if res.get("status") in ("rejected_safety_violation", "rejected_safety_policy"):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "rejected_safety_violation",
+                "error": res.get("error"),
+                "detail": res.get("error"),
+                "safety_metadata": res.get("safety_metadata", {})
+            }
+        )
+    if res.get("status") == "rejected_insufficient_credits":
+        return JSONResponse(status_code=402, content=res)
     if res.get("status") == "rejected_operator_unavailable":
         raise HTTPException(status_code=503, detail=res.get("error"))
     if res.get("status") == "rejected_by_policy":
@@ -224,6 +291,18 @@ async def api_custom_task(req: CustomTaskRequest, _auth: bool = Depends(verify_a
         stated_purpose=req.stated_purpose,
         client_id=req.client_id
     )
+    if res.get("status") in ("rejected_safety_violation", "rejected_safety_policy"):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "rejected_safety_violation",
+                "error": res.get("error"),
+                "detail": res.get("error"),
+                "safety_metadata": res.get("safety_metadata", {})
+            }
+        )
+    if res.get("status") == "rejected_insufficient_credits":
+        return JSONResponse(status_code=402, content=res)
     if res.get("status") == "rejected_operator_unavailable":
         raise HTTPException(status_code=503, detail=res.get("error"))
     if res.get("status") == "rejected_by_policy":

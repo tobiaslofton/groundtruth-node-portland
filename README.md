@@ -1,6 +1,7 @@
 # GroundTruth Protocol: Physical Agency Layer for Autonomous AI Agents
 
-> **Node #001: Portland Metro Genesis Node (Experimental Proof-of-Concept)**
+> **Node #001: Portland Metro Genesis Node (Experimental Proof-of-Concept)**  
+> **Geographic Boundary Addendum (Current Testing Phase):** Testing is intentionally constrained to a hyper-local geographical corridor in the Portland, Oregon metropolitan area (Multnomah and Clackamas counties). The objective is to rigorously validate end-to-end agent-to-human actuation, SLA timing bounds, and automated multimodal verification in a focused physical footprint before deploying additional regional nodes.
 
 ## 1. The Core Thesis: Breaking the Reality Boundary
 Autonomous AI agents have mastered code generation, web research, and digital API orchestration, but they remain completely blind and paralyzed at the physical boundary. 

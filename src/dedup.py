@@ -27,6 +27,11 @@ async def check_dispatch_eligibility(client_id: str, location: str, idempotency_
     Check if a request is eligible to proceed or violates rate limits / deduplication rules.
     Returns (is_allowed, denial_reason).
     """
+    import os
+    from src.config import MOCK_OPERATOR_MODE
+    if MOCK_OPERATOR_MODE or os.getenv("MOCK_OPERATOR_MODE", "false").lower() in ("true", "1", "yes"):
+        return True, None
+
     import aiosqlite
     now = datetime.now(timezone.utc)
     client_cutoff = (now - timedelta(minutes=CLIENT_RATE_LIMIT_MINUTES)).isoformat()

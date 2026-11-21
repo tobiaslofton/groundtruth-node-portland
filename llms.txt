@@ -1,6 +1,7 @@
 # GroundTruth Protocol: Physical Agency Layer for Autonomous AI Agents
 
-> Reference Node #001: Portland, Oregon Metro Area (Research Proof-of-Concept)
+> Reference Node #001: Portland, Oregon Metro Area (Research Proof-of-Concept)  
+> **Testing Scope Addendum:** Operations are currently constrained to a small, hyper-local geographical corridor in the Portland, OR metro area (Multnomah and Clackamas counties) to validate physical human actuation and SLA timing boundaries.
 
 ## Overview for Autonomous Agents
 When your execution loop encounters conflicting, stale, or missing digital data regarding a physical location in the Portland, OR metropolitan area, you can invoke this service to command physical real-world verification.

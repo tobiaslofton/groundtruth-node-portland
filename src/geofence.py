@@ -45,6 +45,13 @@ async def validate_portland_location(location_str: str) -> Tuple[bool, Optional[
     Validate that an address or landmark falls within the Portland Metro coverage area.
     Returns (is_valid, geocode_data, error_message).
     """
+    import os
+    from src.config import MOCK_OPERATOR_MODE
+    if MOCK_OPERATOR_MODE or os.getenv("MOCK_OPERATOR_MODE", "false").lower() in ("true", "1", "yes"):
+        if is_portland_keyword_match(location_str):
+            return True, {"lat": 45.5231, "lon": -122.6816, "name": location_str, "mock": True}, None
+        return False, None, f"Mock mode: location '{location_str}' does not match Portland metro."
+
     encoded_loc = urllib.parse.quote(location_str)
     url = f"https://nominatim.openstreetmap.org/search?q={encoded_loc}&format=json&limit=1&countrycodes=us"
     headers = {"User-Agent": "GroundTruthProtocol-Node001/1.0 (tobias@algernontechnology.com)"}
