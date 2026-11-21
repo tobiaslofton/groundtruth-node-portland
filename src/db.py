@@ -56,6 +56,10 @@ async def init_db() -> None:
             CREATE TABLE IF NOT EXISTS billing_ledgers (
                 client_id TEXT PRIMARY KEY,
                 balance REAL NOT NULL DEFAULT 0.0,
+                plan_tier TEXT DEFAULT 'pay_as_you_go',
+                monthly_quota INTEGER DEFAULT 0,
+                quota_remaining INTEGER DEFAULT 0,
+                subscription_expires_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -75,6 +79,13 @@ async def init_db() -> None:
         # Ensure operator_id column exists in tasks if created prior
         try:
             await db.execute("ALTER TABLE tasks ADD COLUMN operator_id TEXT;")
+        except Exception:
+            pass
+        try:
+            await db.execute("ALTER TABLE billing_ledgers ADD COLUMN plan_tier TEXT DEFAULT 'pay_as_you_go';")
+            await db.execute("ALTER TABLE billing_ledgers ADD COLUMN monthly_quota INTEGER DEFAULT 0;")
+            await db.execute("ALTER TABLE billing_ledgers ADD COLUMN quota_remaining INTEGER DEFAULT 0;")
+            await db.execute("ALTER TABLE billing_ledgers ADD COLUMN subscription_expires_at TEXT;")
         except Exception:
             pass
 

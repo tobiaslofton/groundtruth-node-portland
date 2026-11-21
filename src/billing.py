@@ -38,6 +38,111 @@ COMPLEXITY_SURCHARGES = {
     "custom": 15.0,
 }
 
+# B2B Enterprise Subscription Tiers (Monthly Memberships)
+SUBSCRIPTION_PLANS = {
+    "pay_as_you_go": {
+        "name": "Pay-As-You-Go",
+        "monthly_fee": 0.0,
+        "included_audits": 0,
+        "discount_per_audit": 0.0,
+        "sla_priority": "standard"
+    },
+    "starter": {
+        "name": "Developer / Starter Membership",
+        "monthly_fee": 199.0,
+        "included_audits": 4,
+        "discount_per_audit": 0.0,
+        "sla_priority": "high"
+    },
+    "pro": {
+        "name": "Acquisition Team / Pro Membership",
+        "monthly_fee": 990.0,
+        "included_audits": 25,
+        "discount_per_audit": 5.0,  # $5 discount on overages
+        "sla_priority": "priority_rush"
+    },
+    "enterprise": {
+        "name": "Enterprise Fleet / National Node",
+        "monthly_fee": 2950.0,
+        "included_audits": 80,
+        "discount_per_audit": 10.0,
+        "sla_priority": "instant_guarantee"
+    }
+}
+
+
+async def subscribe_client(client_id: str, plan_name: str) -> Dict[str, Any]:
+    """
+    Subscribes a client to a monthly enterprise tier, provisioning monthly audit credits.
+    """
+    from datetime import timedelta
+    plan_key = plan_name.lower().strip()
+    if plan_key not in SUBSCRIPTION_PLANS:
+        raise ValueError(f"Invalid plan '{plan_name}'. Must be one of: {list(SUBSCRIPTION_PLANS.keys())}")
+
+    plan = SUBSCRIPTION_PLANS[plan_key]
+    now = datetime.now(timezone.utc)
+    expires_at = (now + timedelta(days=30)).isoformat()
+    now_iso = now.isoformat()
+
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO billing_ledgers (
+                client_id, balance, plan_tier, monthly_quota, quota_remaining,
+                subscription_expires_at, created_at, updated_at
+            ) VALUES (?, 0.0, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(client_id) DO UPDATE SET
+                plan_tier = excluded.plan_tier,
+                monthly_quota = excluded.monthly_quota,
+                quota_remaining = excluded.quota_remaining,
+                subscription_expires_at = excluded.subscription_expires_at,
+                updated_at = excluded.updated_at
+        """, (client_id, plan_key, plan["included_audits"], plan["included_audits"], expires_at, now_iso, now_iso))
+        await db.commit()
+
+    logger.info("Subscribed client %s to %s plan with %d audits.", client_id, plan["name"], plan["included_audits"])
+    return {
+        "client_id": client_id,
+        "plan": plan_key,
+        "monthly_fee": plan["monthly_fee"],
+        "quota_remaining": plan["included_audits"],
+        "subscription_expires_at": expires_at,
+        "status": "active"
+    }
+
+
+async def get_client_subscription(client_id: str) -> Dict[str, Any]:
+    """Retrieve membership and quota status for client."""
+    async with aiosqlite.connect(config.DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT balance, plan_tier, monthly_quota, quota_remaining, subscription_expires_at FROM billing_ledgers WHERE client_id = ?",
+            (client_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return {
+                    "client_id": client_id,
+                    "plan_tier": "pay_as_you_go",
+                    "balance": 0.0,
+                    "quota_remaining": 0,
+                    "is_active": False
+                }
+            
+            now_iso = datetime.now(timezone.utc).isoformat()
+            exp = row["subscription_expires_at"]
+            is_active = (exp is not None and exp > now_iso)
+            return {
+                "client_id": client_id,
+                "balance": float(row["balance"]),
+                "plan_tier": row["plan_tier"] or "pay_as_you_go",
+                "monthly_quota": row["monthly_quota"] or 0,
+                "quota_remaining": row["quota_remaining"] or 0,
+                "subscription_expires_at": exp,
+                "is_active": is_active
+            }
+
+
 
 def estimate_task_cost(location: str, complexity: str = "standard") -> float:
     """
@@ -114,28 +219,25 @@ async def deposit_client_credits(client_id: str, amount: float) -> float:
 
 async def lock_escrow(task_id: str, client_id: str, amount: float) -> bool:
     """
-    Atomically lock task credits from client's balance into task_escrows.
-    Returns True if balance was sufficient and escrow locked, False otherwise.
+    Atomically lock task credits from client's balance OR member quota into task_escrows.
+    If client has active subscription quota remaining, decrements quota first!
     """
     if amount <= 0:
         return False
 
     now_iso = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(config.DB_PATH) as db:
-        # Check current balance
+        db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT balance FROM billing_ledgers WHERE client_id = ?",
+            "SELECT balance, quota_remaining, subscription_expires_at FROM billing_ledgers WHERE client_id = ?",
             (client_id,)
         ) as cursor:
             row = await cursor.fetchone()
-            current_balance = float(row[0]) if row else 0.0
 
-        if current_balance < amount:
-            logger.warning(
-                "Escrow lock failed for %s on task %s: required %.2f, current balance %.2f",
-                client_id, task_id, amount, current_balance
-            )
-            return False
+        current_balance = float(row["balance"]) if row else 0.0
+        quota_remaining = int(row["quota_remaining"]) if (row and row["quota_remaining"]) else 0
+        sub_exp = row["subscription_expires_at"] if row else None
+        has_active_sub = (sub_exp is not None and sub_exp > now_iso and quota_remaining > 0)
 
         # Check if escrow already exists for this task
         async with db.execute(
@@ -147,19 +249,41 @@ async def lock_escrow(task_id: str, client_id: str, amount: float) -> bool:
                 logger.warning("Escrow already exists for task %s with status %s", task_id, existing[0])
                 return False
 
-        # Deduct balance from client
-        await db.execute("""
-            UPDATE billing_ledgers 
-            SET balance = balance - ?, updated_at = ?
-            WHERE client_id = ?
-        """, (amount, now_iso, client_id))
+        if has_active_sub:
+            # Deduct from membership quota
+            await db.execute("""
+                UPDATE billing_ledgers
+                SET quota_remaining = quota_remaining - 1, updated_at = ?
+                WHERE client_id = ?
+            """, (now_iso, client_id))
+            notes = "subscription_quota_deducted"
+            lock_amount = amount  # Escrow tracks full payout value
+        elif current_balance >= amount:
+            # Deduct cash balance
+            await db.execute("""
+                UPDATE billing_ledgers 
+                SET balance = balance - ?, updated_at = ?
+                WHERE client_id = ?
+            """, (amount, now_iso, client_id))
+            notes = "cash_balance_locked"
+            lock_amount = amount
+        else:
+            logger.warning(
+                "Escrow lock failed for %s on task %s: required %.2f, current balance %.2f, quota: %d",
+                client_id, task_id, amount, current_balance, quota_remaining
+            )
+            return False
 
         # Insert locked escrow record
         await db.execute("""
             INSERT INTO task_escrows (
                 task_id, client_id, amount, status, operator_id, locked_at, settled_at, notes
-            ) VALUES (?, ?, ?, 'locked', NULL, ?, NULL, NULL)
-        """, (task_id, client_id, amount, now_iso))
+            ) VALUES (?, ?, ?, 'locked', NULL, ?, NULL, ?)
+        """, (task_id, client_id, lock_amount, now_iso, notes))
+
+        await db.commit()
+        logger.info("Locked %.2f credits in escrow for task %s (client: %s, mode: %s)", lock_amount, task_id, client_id, notes)
+        return True
 
         await db.commit()
         logger.info("Locked %.2f credits in escrow for task %s (client: %s)", amount, task_id, client_id)
